@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Pace Downloader</title>
+<link rel="icon" href="assets/icon.svg">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2a2f3a;
+    --text: #e7e9ee; --muted: #8b93a3; --accent: #f0643c; --accent2: #ff8a5c;
+    --ok: #3ccf8e; --warn: #f2b84b; --bad: #ef5b5b; --radius: 10px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f5f6f8; --panel:#fff; --panel2:#f0f2f5; --line:#e1e4ea; --text:#1b1e24; --muted:#687080; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+  button, select, input { font: inherit; color: inherit; }
+  a { color: var(--accent2); }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-bottom: 1px solid var(--line);
+           background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header h1 img { width: 26px; height: 26px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  .seg { display: inline-flex; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+  .seg button { border: 0; background: transparent; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  select, input[type=search] { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  .btn { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+         text-decoration: none; color: var(--text); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent2); }
+  .btn.sm { padding: 3px 9px; font-size: 12px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  main { flex: 1; display: flex; min-height: 0; }
+  aside { width: 290px; border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  aside .search { padding: 10px; border-bottom: 1px solid var(--line); }
+  aside .search input { width: 100%; }
+  #arcs { overflow: auto; flex: 1; padding: 6px; }
+  .arc { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+  .arc:hover { background: var(--panel2); }
+  .arc.on { background: var(--accent); color: #fff; }
+  .arc.on .count { color: #fff; opacity: .85; }
+  .arc .n { width: 22px; text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .arc.on .n { color: #fff; }
+  .arc .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .count { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .count.done { color: var(--ok); }
+  #content { flex: 1; overflow: auto; padding: 20px 24px 110px; }
+  .arc-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .arc-head h2 { margin: 0; font-size: 22px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin: 14px 0; }
+  .card h3 { margin: 0; padding: 10px 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+             border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .main { flex: 1; min-width: 0; }
+  .row .title { font-weight: 500; }
+  .row .sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row.unavail .title { color: var(--muted); }
+  .row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  .epnum { width: 28px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .chip { font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+  .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+  .chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
+  .actions { display: flex; gap: 6px; align-items: center; }
+  details.plot { margin-top: 3px; }
+  details.plot summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; }
+  details.plot summary::-webkit-details-marker { display: none; }
+  details.plot p { white-space: pre-line; margin: 6px 0 2px; color: var(--muted); font-size: 12.5px; }
+  .notice { padding: 10px 14px; border-radius: var(--radius); background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+            border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); margin: 12px 0; font-size: 13px; }
+  .notice.info { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  #bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line);
+         border-radius: 14px; padding: 10px 14px; display: none; gap: 10px; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 5; }
+  #bar.show { display: flex; }
+  #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  #toast.show { opacity: 1; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; max-width: 640px; padding: 22px 26px; }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  dialog h2 { margin-top: 0; }
+  dialog li { margin: 6px 0; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  .queue { max-height: 300px; overflow: auto; margin: 10px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1><img src="assets/icon.svg" alt="">One Pace Downloader</h1>
+  <span class="meta" id="catalogMeta">Loading catalog…</span>
+  <span class="spacer"></span>
+  <div class="seg" id="modeSeg" title="Where downloads come from">
+    <button data-mode="torrent">Torrent (magnet)</button>
+    <button data-mode="direct">Direct (Pixeldrain)</button>
+  </div>
+  <select id="quality" title="Preferred quality">
+    <option>1080p</option><option>720p</option><option>480p</option>
+  </select>
+  <select id="version" title="Version (direct downloads only; torrents are subbed)">
+    <option value="English Subtitles">Sub</option>
+    <option value="English Dub">Dub</option>
+    <option value="English Dub with Closed Captions">Dub + CC</option>
+  </select>
+  <button class="btn" id="helpBtn">Setup tips</button>
+</header>
+<main>
+  <aside>
+    <div class="search"><input type="search" id="search" placeholder="Search arcs & episodes…"></div>
+    <div id="arcs"></div>
+  </aside>
+  <section id="content"><div class="empty">Loading…</div></section>
+</main>
+
+<div id="bar">
+  <span id="barCount"></span>
+  <button class="btn primary" id="barSend"></button>
+  <button class="btn" id="barCopy">Copy links</button>
+  <button class="btn" id="barClear">Clear</button>
+</div>
+<div id="toast"></div>
+
+<dialog id="help">
+  <h2>Setup tips (one-time)</h2>
+  <ol>
+    <li><b>Let magnet links open Transmission.</b> Open Transmission → <i>Settings</i> → <i>General</i>, and make it the default app for magnet links.
+      The first time you click <i>Open</i>, your browser asks to allow it. In Chrome, tick “Always allow”.</li>
+    <li><b>Start downloads without a prompt.</b> Transmission → <i>Settings</i> → <i>Transfers</i>: turn off “Display a window when opening a torrent file”
+      and pick a download folder.</li>
+    <li><b>Batch sends.</b> “Send to torrent client” opens the magnets one at a time. If your browser blocks some of them, use the queue
+      that pops up, or <i>Copy links</i> and paste them into your client.</li>
+    <li><b>Direct (Pixeldrain) not loading?</b> Some ISPs, Airtel and Jio among them, block <code>pixeldrain.com</code> and <code>nyaa.si</code> at the DNS level.
+      To fix that, go to System Settings → Network → (your Wi-Fi) → Details → DNS and add <code>1.1.1.1</code> and <code>1.0.0.1</code>.
+      Torrents (magnets) still work without this, because your client talks to trackers and peers directly.</li>
+    <li><b>Pixeldrain limits.</b> Free Pixeldrain downloads are rate-limited per day. For a big arc like Wano, torrents are usually the better route.</li>
+  </ol>
+  <p class="meta">The catalog comes from the weekly auto-refreshed <code>data</code> branch of
+    <a href="https://github.com/Nicolaslahri/onepacedownloader" target="_blank" rel="noopener">Nicolaslahri/onepacedownloader</a>.
+    If GitHub can't be reached, the bundled snapshot is used.</p>
+  <form method="dialog" style="text-align:right"><button class="btn primary">Got it</button></form>
+</dialog>
+
+<dialog id="queueDlg">
+  <h2 id="queueTitle">Sending to your torrent client</h2>
+  <p class="meta" id="queueHint">If any magnet didn't open, click it below.</p>
+  <div class="queue" id="queueList"></div>
+  <form method="dialog" style="text-align:right"><button class="btn primary">Done</button></form>
+</dialog>
+
+<script>
+"use strict";
+const CATALOG_URL = "https://raw.githubusercontent.com/Nicolaslahri/onepacedownloader/data/episode_index.json";
+const CACHE_KEY = "opd.catalog.v1";
+const PREFS_KEY = "opd.prefs.v1";
+const SENT_KEY = "opd.sent.v1";
+const QUALITY_ORDER = ["1080p", "720p", "480p"];
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtBytes = (b) => { if (!b) return ""; const u = ["B","KB","MB","GB","TB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return `${b.toFixed(i >= 3 ? 2 : 0)} ${u[i]}`; };
+const pixeldrainUrl = (id) => `https://pixeldrain.com/api/file/${encodeURIComponent(id)}?download`;
+const btih = (magnet) => (magnet.match(/btih:([a-z0-9]+)/i) || [])[1]?.toLowerCase() || magnet;
+
+const state = {
+  catalog: null, source: "", arcIndex: 0, search: "",
+  prefs: Object.assign({ mode: "torrent", quality: "1080p", version: "English Subtitles" }, JSON.parse(localStorage.getItem(PREFS_KEY) || "{}")),
+  sent: new Set(JSON.parse(localStorage.getItem(SENT_KEY) || "[]")),
+  selected: new Map(), // key -> {kind:'magnet'|'direct', url, label}
+};
+const savePrefs = () => localStorage.setItem(PREFS_KEY, JSON.stringify(state.prefs));
+const markSent = (key) => { state.sent.add(key); localStorage.setItem(SENT_KEY, JSON.stringify([...state.sent])); };
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1800); }
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+  toast("Copied");
+}
+
+// ── catalog loading: live → cached → bundled snapshot ───────────────
+async function loadCatalog() {
+  try {
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 12000);
+    const res = await fetch(CATALOG_URL, { signal: ctl.signal, cache: "no-cache" });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    if (!data.arcs?.length) throw new Error("empty");
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch {}
+    return [data, "live"];
+  } catch (e) {
+    console.warn("Live catalog failed:", e);
+  }
+  try { const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); if (c?.arcs?.length) return [c, "cached"]; } catch {}
+  await new Promise((ok, fail) => { const s = document.createElement("script"); s.src = "catalog-snapshot.js"; s.onload = ok; s.onerror = fail; document.head.append(s); }).catch(() => {});
+  if (window.ONEPACE_SNAPSHOT?.arcs?.length) return [window.ONEPACE_SNAPSHOT, "snapshot"];
+  throw new Error("Couldn't load the catalog from GitHub, and no bundled snapshot was found.");
+}
+
+// ── source picking ──────────────────────────────────────────────────
+function rankQuality(q) { const pref = QUALITY_ORDER.indexOf(state.prefs.quality); const i = QUALITY_ORDER.indexOf(q); return i < 0 ? 99 : Math.abs(i - pref) + (i > pref ? 0.5 : 0); }
+function torrentsFor(ep) {
+  return ep.sources.filter(s => s.kind === "nyaa")
+    .sort((a, b) => rankQuality(a.quality) - rankQuality(b.quality) || (b.seeders || 0) - (a.seeders || 0));
+}
+function directFor(ep) {
+  // One Pace first (requested version); fall back to Muhn Pace for dubs it hasn't covered.
+  const all = ep.sources.filter(s => (s.kind === "onepace" || s.kind === "muhn") && s.file_id);
+  const wantVer = state.prefs.version;
+  const score = (s) => (s.version === wantVer ? 0 : 10) + (s.kind === "onepace" ? 0 : 1) + rankQuality(s.quality);
+  const best = all.filter(s => s.version === wantVer || (wantVer !== "English Subtitles" && s.kind === "muhn")).sort((a, b) => score(a) - score(b))[0];
+  return { best, others: all.filter(s => s !== best) };
+}
+function epKey(arc, ep) { return `${arc.title}#${ep.num}`; }
+function itemFor(arc, ep) {
+  if (state.prefs.mode === "torrent") {
+    const t = torrentsFor(ep)[0];
+    return t ? { kind: "magnet", url: t.magnet, label: t.torrent_title, sentKey: "m:" + btih(t.magnet), src: t } : null;
+  }
+  const { best } = directFor(ep);
+  return best ? { kind: "direct", url: pixeldrainUrl(best.file_id), label: best.filename, sentKey: "d:" + best.file_id, src: best } : null;
+}
+
+// ── rendering ───────────────────────────────────────────────────────
+function arcProgress(arc) {
+  let got = 0, avail = 0;
+  for (const ep of arc.episodes) { const it = itemFor(arc, ep); if (it) { avail++; if (state.sent.has(it.sentKey)) got++; } }
+  return { got, avail, total: arc.episodes.length };
+}
+function matches(arc) {
+  const q = state.search.trim().toLowerCase();
+  if (!q) return true;
+  return arc.title.toLowerCase().includes(q) || arc.episodes.some(e => (e.canonical_title || "").toLowerCase().includes(q));
+}
+
+function renderArcs() {
+  const list = state.catalog.arcs.map((arc, i) => ({ arc, i })).filter(({ arc }) => matches(arc));
+  const specials = state.catalog.specials?.length;
+  $("#arcs").innerHTML = list.map(({ arc, i }) => {
+    const p = arcProgress(arc);
+    const cnt = p.got ? `${p.got}/${p.avail}` : `${p.avail}/${p.total}`;
+    return `<div class="arc ${i === state.arcIndex ? "on" : ""}" data-i="${i}">
+      <span class="n">${i + 1}</span><span class="t">${esc(arc.title)}</span>
+      <span class="count ${p.got && p.got === p.avail ? "done" : ""}" title="${p.got ? "sent / available" : "available / total"} (${state.prefs.mode})">${cnt}</span></div>`;
+  }).join("") + (specials ? `<div class="arc ${state.arcIndex === -1 ? "on" : ""}" data-i="-1"><span class="n">★</span><span class="t">Specials</span><span class="count">${specials}</span></div>` : "")
+    || `<div class="empty">No matches</div>`;
+}
+
+function torrentRow(t, opts = {}) {
+  const key = "m:" + btih(t.magnet);
+  const seeds = t.seeders ?? 0;
+  const seedChip = `<span class="chip ${seeds >= 5 ? "ok" : seeds > 0 ? "warn" : "bad"}" title="Seeders when the catalog was last scraped">${seeds} seeds</span>`;
+  const check = opts.selectable ? `<input type="checkbox" data-sel="${esc(key)}" data-url="${esc(t.magnet)}" data-label="${esc(t.torrent_title)}" data-kind="magnet" ${state.selected.has(key) ? "checked" : ""}>` : "";
+  return `<div class="row">${check}
+    <div class="main"><div class="title">${esc(t.torrent_title)}</div>
+      <div class="sub">${esc(t.size_str || fmtBytes(t.size_bytes))} · ${esc(t.quality)}${t.uploader ? " · " + esc(t.uploader) : ""}</div></div>
+    ${state.sent.has(key) ? `<span class="chip ok">Sent</span>` : ""}${seedChip}
+    <div class="actions"><a class="btn sm primary" href="${esc(t.magnet)}" data-open="${esc(key)}">Open</a>
+      <button class="btn sm" data-copy="${esc(t.magnet)}">Copy</button></div></div>`;
+}
+
+function renderSpecials() {
+  const sp = state.catalog.specials || [];
+  $("#content").innerHTML = `<div class="arc-head"><h2>Specials</h2><span class="meta">${sp.length} torrents</span></div>
+    <div class="card"><h3>Torrents</h3>${sp.filter(s => s.magnet).map(t => torrentRow(t, { selectable: true })).join("")}</div>`;
+}
+
+function renderArc() {
+  if (state.arcIndex === -1) return renderSpecials();
+  const arc = state.catalog.arcs[state.arcIndex];
+  if (!arc) { $("#content").innerHTML = `<div class="empty">Pick an arc</div>`; return; }
+  const mode = state.prefs.mode;
+  const p = arcProgress(arc);
+  const totalSize = arc.episodes.reduce((n, ep) => n + (itemFor(arc, ep)?.src.size_bytes || 0), 0);
+  let html = `<div class="arc-head"><h2>${esc(arc.title)}</h2>
+    <span class="meta">Arc ${state.arcIndex + 1} · ${arc.episodes.length} episodes · ${p.avail} available as ${mode === "torrent" ? "torrents" : "direct downloads"}${totalSize ? " · " + fmtBytes(totalSize) : ""}</span></div>`;
+
+  if (mode === "torrent") {
+    const packs = (arc.arc_packs || []).filter(s => s.magnet);
+    if (packs.length) html += `<div class="card"><h3>Whole-arc packs <span class="meta" style="text-transform:none;letter-spacing:0">a single torrent for the whole arc; older packs may be an earlier cut</span></h3>${packs.map(t => torrentRow(t, { selectable: true })).join("")}</div>`;
+    if (p.avail < arc.episodes.length) html += `<div class="notice info">${arc.episodes.length - p.avail} episode(s) have no per-episode torrent. Use a pack above, or switch to <b>Direct</b>.</div>`;
+  } else {
+    html += `<div class="notice info">Direct downloads save to your browser's Downloads folder. If Pixeldrain doesn't load, see <a href="#" data-help>Setup tips</a> (DNS).</div>`;
+  }
+
+  const selectableKeys = [];
+  const rows = arc.episodes.map(ep => {
+    const it = itemFor(arc, ep);
+    const title = ep.canonical_title || ep.display_title;
+    const plot = ep.plot ? `<details class="plot"><summary>Synopsis ▸</summary><p>${esc(ep.plot)}</p></details>` : "";
+    if (!it) {
+      return `<div class="row unavail"><input type="checkbox" disabled><span class="epnum">${ep.num}</span>
+        <div class="main"><div class="title">${esc(title)}</div><div class="sub">${esc(ep.display_title)} · not available as ${mode === "torrent" ? "an individual torrent" : "a direct download in this version"}</div>${plot}</div></div>`;
+    }
+    selectableKeys.push(it.sentKey);
+    const s = it.src;
+    const sent = state.sent.has(it.sentKey);
+    let extra = "";
+    if (mode === "torrent") {
+      const seeds = s.seeders ?? 0;
+      extra = `<span class="chip">${esc(s.quality)}</span><span class="chip ${seeds >= 5 ? "ok" : seeds > 0 ? "warn" : "bad"}">${seeds} seeds</span>`;
+    } else {
+      const verShort = { "English Subtitles": "Sub", "English Dub": "Dub", "English Dub with Closed Captions": "Dub+CC" }[s.version] || s.version;
+      extra = `<span class="chip">${esc(s.quality)}</span><span class="chip">${esc(verShort)}${s.kind === "muhn" ? " · Muhn" : ""}</span>`;
+    }
+    const alts = mode === "torrent" ? torrentsFor(ep).slice(1) : directFor(ep).others;
+    const altHtml = alts.length ? `<details class="plot"><summary>${alts.length} other option${alts.length > 1 ? "s" : ""} ▸</summary>${alts.map(a => mode === "torrent"
+        ? `<div class="sub"><a href="${esc(a.magnet)}">${esc(a.quality)} · ${esc(a.size_str || "")} · ${a.seeders ?? 0} seeds</a> — ${esc(a.torrent_title)}</div>`
+        : `<div class="sub"><a href="${esc(pixeldrainUrl(a.file_id))}" target="_blank" rel="noopener">${esc(a.quality)} · ${esc(a.version)}${a.kind === "muhn" ? " (Muhn)" : ""} · ${fmtBytes(a.size_bytes)}</a></div>`).join("")}</details>` : "";
+    return `<div class="row"><input type="checkbox" data-sel="${esc(it.sentKey)}" data-url="${esc(it.url)}" data-label="${esc(it.label)}" data-kind="${it.kind}" ${state.selected.has(it.sentKey) ? "checked" : ""}>
+      <span class="epnum">${ep.num}</span>
+      <div class="main"><div class="title">${esc(title)}</div><div class="sub" title="${esc(it.label)}">${esc(it.label)} · ${fmtBytes(s.size_bytes) || esc(s.size_str || "")}</div>${plot}${altHtml}</div>
+      ${sent ? `<span class="chip ok">${mode === "torrent" ? "Sent" : "Downloaded"}</span>` : ""}${extra}
+      <div class="actions">${it.kind === "magnet"
+        ? `<a class="btn sm primary" href="${esc(it.url)}" data-open="${esc(it.sentKey)}">Open</a>`
+        : `<a class="btn sm primary" href="${esc(it.url)}" data-open="${esc(it.sentKey)}" target="_blank" rel="noopener">Download</a>`}
+        <button class="btn sm" data-copy="${esc(it.url)}">Copy</button></div></div>`;
+  }).join("");
+
+  const allSel = selectableKeys.length && selectableKeys.every(k => state.selected.has(k));
+  html += `<div class="card" id="eps"><h3><input type="checkbox" id="selAll" ${allSel ? "checked" : ""} ${selectableKeys.length ? "" : "disabled"}> Episodes
+    <span class="spacer"></span><button class="btn sm" id="selNew">Select not yet ${mode === "torrent" ? "sent" : "downloaded"}</button></h3>${rows}</div>`;
+  $("#content").innerHTML = html;
+}
+
+function renderBar() {
+  const n = state.selected.size;
+  $("#bar").classList.toggle("show", n > 0);
+  if (!n) return;
+  const kinds = new Set([...state.selected.values()].map(v => v.kind));
+  $("#barCount").textContent = `${n} selected`;
+  $("#barSend").textContent = kinds.has("direct") && !kinds.has("magnet") ? "Download all" : "Send to torrent client";
+}
+
+function renderAll() {
+  $("#modeSeg").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.mode === state.prefs.mode));
+  $("#quality").value = state.prefs.quality;
+  $("#version").value = state.prefs.version;
+  $("#version").disabled = state.prefs.mode === "torrent";
+  renderArcs(); renderArc(); renderBar();
+}
+
+// ── opening magnets / downloads ─────────────────────────────────────
+function launch(url, kind) {
+  if (kind === "magnet") {
+    // A hidden iframe hands the magnet to the OS handler without navigating away from the page.
+    const f = document.createElement("iframe"); f.style.display = "none"; f.src = url; document.body.append(f);
+    setTimeout(() => f.remove(), 5000);
+  } else {
+    const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.append(a); a.click(); a.remove();
+  }
+}
+async function sendSelected() {
+  const items = [...state.selected.entries()];
+  const dlg = $("#queueDlg");
+  const isDirect = items.every(([, v]) => v.kind === "direct");
+  $("#queueTitle").textContent = isDirect ? "Starting downloads" : "Sending to your torrent client";
+  $("#queueHint").textContent = isDirect
+    ? "Your browser may ask to allow multiple downloads. Click any item that didn't start."
+    : "If a magnet didn't open (some browsers only allow one per click), click it below.";
+  $("#queueList").innerHTML = items.map(([k, v], i) => `<div class="row"><span class="epnum">${i + 1}</span>
+    <div class="main"><div class="sub" title="${esc(v.label)}">${esc(v.label)}</div></div>
+    <a class="btn sm" href="${esc(v.url)}" ${v.kind === "direct" ? 'target="_blank" rel="noopener"' : ""} data-open="${esc(k)}">${v.kind === "direct" ? "Download" : "Open"}</a></div>`).join("");
+  dlg.showModal();
+  for (const [k, v] of items) {
+    launch(v.url, v.kind); markSent(k);
+    await new Promise(r => setTimeout(r, v.kind === "magnet" ? 900 : 1500));
+  }
+  state.selected.clear();
+  renderAll();
+}
+
+// ── events ──────────────────────────────────────────────────────────
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-copy],[data-open],[data-help],.arc,[data-mode],#selNew");
+  if (!t) return;
+  if (t.dataset.copy) { e.preventDefault(); copy(t.dataset.copy); }
+  else if (t.dataset.open) { markSent(t.dataset.open); setTimeout(() => { renderArcs(); if (!$("#queueDlg").open) renderArc(); }, 50); }
+  else if (t.hasAttribute("data-help")) { e.preventDefault(); $("#help").showModal(); }
+  else if (t.classList.contains("arc")) { state.arcIndex = +t.dataset.i; renderArcs(); renderArc(); $("#content").scrollTop = 0; }
+  else if (t.dataset.mode) { state.prefs.mode = t.dataset.mode; savePrefs(); state.selected.clear(); renderAll(); }
+  else if (t.id === "selNew") {
+    document.querySelectorAll("#eps .row input[data-sel]").forEach(cb => {
+      if (!state.sent.has(cb.dataset.sel)) state.selected.set(cb.dataset.sel, { kind: cb.dataset.kind, url: cb.dataset.url, label: cb.dataset.label });
+    });
+    renderArc(); renderBar();
+  }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t.dataset?.sel) {
+    if (t.checked) state.selected.set(t.dataset.sel, { kind: t.dataset.kind, url: t.dataset.url, label: t.dataset.label });
+    else state.selected.delete(t.dataset.sel);
+    renderBar();
+  } else if (t.id === "selAll") {
+    document.querySelectorAll("#eps .row input[data-sel]").forEach(cb => {
+      cb.checked = t.checked;
+      if (t.checked) state.selected.set(cb.dataset.sel, { kind: cb.dataset.kind, url: cb.dataset.url, label: cb.dataset.label });
+      else state.selected.delete(cb.dataset.sel);
+    });
+    renderBar();
+  } else if (t.id === "quality" || t.id === "version") {
+    state.prefs[t.id] = t.value; savePrefs(); state.selected.clear(); renderAll();
+  }
+});
+$("#search").addEventListener("input", (e) => { state.search = e.target.value; renderArcs(); });
+$("#helpBtn").onclick = () => $("#help").showModal();
+$("#barClear").onclick = () => { state.selected.clear(); renderArc(); renderBar(); };
+$("#barCopy").onclick = () => copy([...state.selected.values()].map(v => v.url).join("\n"));
+$("#barSend").onclick = sendSelected;
+
+(async () => {
+  try {
+    const [data, source] = await loadCatalog();
+    state.catalog = data; state.source = source;
+    const when = (data.scraped_at || "").slice(0, 10);
+    $("#catalogMeta").textContent = `${data.arcs.length} arcs · catalog ${when}${source === "live" ? "" : ` (${source}, offline)`}`;
+    if (source !== "live") $("#catalogMeta").title = "GitHub couldn't be reached, so an older copy is in use.";
+    if (!localStorage.getItem("opd.seenHelp")) { localStorage.setItem("opd.seenHelp", "1"); $("#help").showModal(); }
+    renderAll();
+  } catch (err) {
+    $("#content").innerHTML = `<div class="notice">${esc(err.message)}</div>`;
+    $("#catalogMeta").textContent = "Catalog unavailable";
+  }
+})();
+</script>
+</body>
+</html>
