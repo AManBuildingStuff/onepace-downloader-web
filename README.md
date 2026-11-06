@@ -17,6 +17,13 @@ On load, the page fetches the catalog from upstream's weekly auto-refreshed `dat
 If GitHub can't be reached, it uses the last cached copy, then `catalog-snapshot.js`.
 To refresh the snapshot, run `./scripts/update-snapshot.sh`.
 
+## Automatic batch adds (optional helper)
+
+Browsers let a page open only one `magnet:` link per click, so selecting 20 episodes would otherwise add just one.
+`scripts/install-helper.sh` builds a tiny AppleScript app, **One Pace Helper**, in `~/Applications`. It handles `onepace-dl://` links.
+**Add all to Transmission** sends the whole batch in one link, and the helper passes each magnet to Transmission (`open -g -a Transmission`).
+Its log is at `~/Library/Logs/OnePaceHelper.log`. If you don't install it, untick the helper option in **Setup tips** to use the manual ⌘V mode.
+
 ## One-time setup tips
 
 See **Setup tips** in the app. In short: make Transmission the default handler for magnet links, and turn off its "open torrent" confirmation window.

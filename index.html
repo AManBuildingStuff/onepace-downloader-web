@@ -132,10 +132,15 @@
   <ol>
     <li><b>Let magnet links open Transmission.</b> Open Transmission → <i>Settings</i> → <i>General</i>, and make it the default app for magnet links.
       The first time you click <i>Open</i>, your browser asks to allow it. In Chrome, tick “Always allow”.</li>
-    <li><b>Start downloads without a prompt.</b> Transmission → <i>Settings</i> → <i>Transfers</i>: turn off “Display a window when opening a torrent file”
-      and pick a download folder.</li>
-    <li><b>Batch sends.</b> “Send to torrent client” opens the magnets one at a time. If your browser blocks some of them, use the queue
-      that pops up, or <i>Copy links</i> and paste them into your client.</li>
+    <li><b>Stop the “where to save?” window.</b> Transmission → <i>Settings</i> → <i>Transfers</i> → <i>Adding</i>:
+      set <i>Default location</i> to a real folder (e.g. <code>Downloads/One Pace</code>), not “Same as torrent file”.
+      Magnets have no torrent file, so with that option Transmission <i>always</i> asks. Then untick
+      “Display a window when opening a magnet link”, which is no longer greyed out.</li>
+    <li><b>Batch sends (automatic).</b> Browsers only let a page open one magnet per click, so batches go through a tiny helper app.
+      Install it once: in Terminal, run <code>./scripts/install-helper.sh</code> from this folder. After that, <i>Add all to Transmission</i>
+      adds every selected torrent in one click. The first time, your browser asks to open “One Pace Helper”: tick “Always allow”.
+      <label style="display:block;margin-top:6px"><input type="checkbox" id="useHelper"> Use One Pace Helper for batches
+      (untick to use the manual mode instead: the first magnet opens and the rest are copied, then you press ⌘V in Transmission)</label></li>
     <li><b>Direct (Pixeldrain) not loading?</b> Some ISPs, Airtel and Jio among them, block <code>pixeldrain.com</code> and <code>nyaa.si</code> at the DNS level.
       To fix that, go to System Settings → Network → (your Wi-Fi) → Details → DNS and add <code>1.1.1.1</code> and <code>1.0.0.1</code>.
       Torrents (magnets) still work without this, because your client talks to trackers and peers directly.</li>
@@ -170,14 +175,14 @@ const btih = (magnet) => (magnet.match(/btih:([a-z0-9]+)/i) || [])[1]?.toLowerCa
 
 const state = {
   catalog: null, source: "", arcIndex: 0, search: "",
-  prefs: Object.assign({ mode: "torrent", quality: "1080p", version: "English Subtitles" }, JSON.parse(localStorage.getItem(PREFS_KEY) || "{}")),
+  prefs: Object.assign({ mode: "torrent", quality: "1080p", version: "English Subtitles", helper: true }, JSON.parse(localStorage.getItem(PREFS_KEY) || "{}")),
   sent: new Set(JSON.parse(localStorage.getItem(SENT_KEY) || "[]")),
   selected: new Map(), // key -> {kind:'magnet'|'direct', url, label}
 };
 const savePrefs = () => localStorage.setItem(PREFS_KEY, JSON.stringify(state.prefs));
 const markSent = (key) => { state.sent.add(key); localStorage.setItem(SENT_KEY, JSON.stringify([...state.sent])); };
 
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1800); }
+function toast(msg, ms = 1800) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms); }
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); }
   catch { const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
@@ -336,7 +341,7 @@ function renderBar() {
   if (!n) return;
   const kinds = new Set([...state.selected.values()].map(v => v.kind));
   $("#barCount").textContent = `${n} selected`;
-  $("#barSend").textContent = kinds.has("direct") && !kinds.has("magnet") ? "Download all" : "Send to torrent client";
+  $("#barSend").textContent = kinds.has("direct") && !kinds.has("magnet") ? "Download all" : "Add all to Transmission";
 }
 
 function renderAll() {
@@ -348,30 +353,74 @@ function renderAll() {
 }
 
 // ── opening magnets / downloads ─────────────────────────────────────
+// Transmission's ⌘V scans pasted text for web links as well as magnets, and macOS's link detector
+// reads tracker hosts inside a magnet (e.g. "...%2F%2Fopen.stealth.si") as extra URLs to download.
+// Percent-encoding the dots keeps the magnet valid (clients decode dn/tr) but hides those false links.
+function pasteSafeMagnet(m) {
+  const [head, query = ""] = m.split("?");
+  return head + "?" + query.split("&").map(kv => kv.startsWith("xt=") ? kv : kv.replace(/\./g, "%2E")).join("&");
+}
+const linkText = (v) => v.kind === "magnet" ? pasteSafeMagnet(v.url) : v.url;
+
 function launch(url, kind) {
   if (kind === "magnet") {
     // A hidden iframe hands the magnet to the OS handler without navigating away from the page.
     const f = document.createElement("iframe"); f.style.display = "none"; f.src = url; document.body.append(f);
     setTimeout(() => f.remove(), 5000);
   } else {
-    const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; document.body.append(a); a.click(); a.remove();
+    // Pixeldrain's ?download replies with Content-Disposition: attachment, so a hidden iframe downloads
+    // without opening tabs (new tabs get killed by the popup blocker after the first one).
+    const f = document.createElement("iframe"); f.style.display = "none"; f.src = url; document.body.append(f);
+    setTimeout(() => f.remove(), 120000);
+  }
+}
+async function writeClipboard(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
   }
 }
 async function sendSelected() {
   const items = [...state.selected.entries()];
-  const dlg = $("#queueDlg");
   const isDirect = items.every(([, v]) => v.kind === "direct");
-  $("#queueTitle").textContent = isDirect ? "Starting downloads" : "Sending to your torrent client";
-  $("#queueHint").textContent = isDirect
-    ? "Your browser may ask to allow multiple downloads. Click any item that didn't start."
-    : "If a magnet didn't open (some browsers only allow one per click), click it below.";
   $("#queueList").innerHTML = items.map(([k, v], i) => `<div class="row"><span class="epnum">${i + 1}</span>
     <div class="main"><div class="sub" title="${esc(v.label)}">${esc(v.label)}</div></div>
-    <a class="btn sm" href="${esc(v.url)}" ${v.kind === "direct" ? 'target="_blank" rel="noopener"' : ""} data-open="${esc(k)}">${v.kind === "direct" ? "Download" : "Open"}</a></div>`).join("");
-  dlg.showModal();
-  for (const [k, v] of items) {
-    launch(v.url, v.kind); markSent(k);
-    await new Promise(r => setTimeout(r, v.kind === "magnet" ? 900 : 1500));
+    <a class="btn sm" href="${esc(v.url)}" ${v.kind === "direct" ? "download" : ""} data-open="${esc(k)}">${v.kind === "direct" ? "Download" : "Open"}</a></div>`).join("");
+
+  if (!isDirect && state.prefs.helper) {
+    // One external launch carries the whole batch; One Pace Helper hands each magnet to Transmission.
+    const magnets = items.filter(([, v]) => v.kind === "magnet");
+    launch("onepace-dl://add?" + magnets.map(([, v]) => "m=" + encodeURIComponent(v.url)).join("&"), "magnet");
+    magnets.forEach(([k]) => markSent(k));
+    toast(`Sent ${magnets.length} torrent${magnets.length > 1 ? "s" : ""} to Transmission`, 4000);
+    state.selected.clear();
+    renderAll();
+    return;
+  }
+  if (!isDirect) {
+    const magnets = items.filter(([, v]) => v.kind === "magnet");
+    const [first, ...rest] = magnets;
+    // Clipboard first: once Transmission takes focus, the page can no longer write to the clipboard.
+    const copied = rest.length ? await writeClipboard(rest.map(([, v]) => linkText(v)).join("\n")) : true;
+    launch(first[1].url, "magnet");
+    magnets.forEach(([k]) => markSent(k));
+    $("#queueTitle").textContent = rest.length ? "Now press ⌘V in Transmission" : "Sent to Transmission";
+    $("#queueHint").innerHTML = rest.length
+      ? (copied
+          ? `Opened the first torrent, and copied the other <b>${rest.length}</b> magnet links. Transmission should now be in front: press <b>⌘V</b> (Edit → Paste) to add them all.`
+          : `Opened the first torrent, but couldn't copy the rest. Click <i>Copy links</i>, then press ⌘V in Transmission.`)
+        + ` <br>If Transmission doesn't come to the front, click <b>Open</b> on any item below.`
+      : "If Transmission didn't open, click Open below.";
+    $("#queueDlg").showModal();
+  } else {
+    $("#queueTitle").textContent = "Starting downloads";
+    $("#queueHint").textContent = "If your browser asks to allow multiple downloads, choose Allow. Click any item that didn't start.";
+    $("#queueDlg").showModal();
+    for (const [k, v] of items) {
+      launch(v.url, "direct"); markSent(k);
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
   state.selected.clear();
   renderAll();
@@ -381,7 +430,7 @@ async function sendSelected() {
 document.addEventListener("click", (e) => {
   const t = e.target.closest("[data-copy],[data-open],[data-help],.arc,[data-mode],#selNew");
   if (!t) return;
-  if (t.dataset.copy) { e.preventDefault(); copy(t.dataset.copy); }
+  if (t.dataset.copy) { e.preventDefault(); const u = t.dataset.copy; copy(u.startsWith("magnet:") ? pasteSafeMagnet(u) : u); }
   else if (t.dataset.open) { markSent(t.dataset.open); setTimeout(() => { renderArcs(); if (!$("#queueDlg").open) renderArc(); }, 50); }
   else if (t.hasAttribute("data-help")) { e.preventDefault(); $("#help").showModal(); }
   else if (t.classList.contains("arc")) { state.arcIndex = +t.dataset.i; renderArcs(); renderArc(); $("#content").scrollTop = 0; }
@@ -411,15 +460,17 @@ document.addEventListener("change", (e) => {
   }
 });
 $("#search").addEventListener("input", (e) => { state.search = e.target.value; renderArcs(); });
-$("#helpBtn").onclick = () => $("#help").showModal();
+$("#helpBtn").onclick = () => { $("#useHelper").checked = state.prefs.helper; $("#help").showModal(); };
+$("#useHelper").onchange = (e) => { state.prefs.helper = e.target.checked; savePrefs(); };
 $("#barClear").onclick = () => { state.selected.clear(); renderArc(); renderBar(); };
-$("#barCopy").onclick = () => copy([...state.selected.values()].map(v => v.url).join("\n"));
+$("#barCopy").onclick = () => copy([...state.selected.values()].map(linkText).join("\n"));
 $("#barSend").onclick = sendSelected;
 
 (async () => {
   try {
     const [data, source] = await loadCatalog();
     state.catalog = data; state.source = source;
+    $("#useHelper").checked = state.prefs.helper;
     const when = (data.scraped_at || "").slice(0, 10);
     $("#catalogMeta").textContent = `${data.arcs.length} arcs · catalog ${when}${source === "live" ? "" : ` (${source}, offline)`}`;
     if (source !== "live") $("#catalogMeta").title = "GitHub couldn't be reached, so an older copy is in use.";
